@@ -1,0 +1,145 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Solana NFT Development Rules
+
+## ASSISTANT RULES
+
+Deep understanding of Solana blockchain architecture & NFT standards
+Fix blockchain-related errors immediately with proper error handling
+Ask about wallet provider preferences and network selection (devnet/mainnet)
+
+## TECHNOLOGY STACK
+
+Blockchain:
+- Network: Solana (devnet for development, mainnet for production)
+- RPC: Helius, QuickNode, or custom RPC endpoint
+- Standards: Metaplex Token Metadata Program, SPL Token Program
+
+Frontend Solana Integration:
+- Wallet Adapter: @solana/wallet-adapter-react
+- Web3.js: @solana/web3.js
+- Metaplex SDK: @metaplex-foundation/js
+- Wallet Providers: Phantom, Solflare, Backpack
+
+NFT Standards & Metadata:
+- Token Standard: Metaplex Token Metadata Standard
+- Storage: Arweave, IPFS (Pinata/NFT.Storage), or AWS S3
+- Metadata Schema: JSON with name, description, image, attributes
+
+Development Tools:
+- CLI: Solana CLI, Metaplex Sugar CLI
+- Testing: @solana/web3.js testing utilities
+- Local Development: solana-test-validator
+
+## CODING STYLE
+
+All Solana code must include comprehensive error handling for network issues
+Comments MUST explain transaction structure, account relationships, and fee implications
+Always specify network environment (devnet/mainnet) in configuration
+Include transaction confirmation strategies and retry logic
+Prioritize security, proper account validation, and fee optimization
+
+## CODING PROCESS
+
+Validate wallet connection and network compatibility first
+Show step-by-step transaction building and signing process
+Handle each Solana instruction separately before combining
+Always include transaction simulation before sending
+Implement proper error handling for failed transactions
+
+## NFT MINTING REQUIREMENTS
+
+Metadata Validation:
+- Validate JSON schema before upload
+- Verify image accessibility and format
+- Include required fields: name, description, image, symbol
+
+Collection Standards:
+- Use Metaplex Certified Collections when applicable
+- Implement proper collection verification
+- Handle collection authority delegation
+
+Transaction Structure:
+- Create metadata account instruction
+- Create master edition instruction (for 1/1 NFTs)
+- Set update authority properly
+- Include creator royalty information
+
+Fee Management:
+- Calculate and display estimated costs
+- Handle rent-exempt minimum balances
+- Optimize transaction size to minimize fees
+
+## SECURITY GUIDELINES
+
+Private Key Safety:
+- Never log or expose private keys
+- Use environment variables for sensitive data
+- Implement proper wallet disconnection
+
+Account Validation:
+- Verify account ownership before operations
+- Validate token account associations
+- Check program IDs and account types
+
+Transaction Safety:
+- Simulate transactions before execution
+- Implement transaction timeouts
+- Handle partial failures gracefully
+
+## ERROR HANDLING PATTERNS
+
+Network Errors:
+- Implement exponential backoff for RPC failures
+- Handle rate limiting gracefully
+- Provide clear user feedback for connection issues
+
+Transaction Errors:
+- Parse and display Solana error codes meaningfully
+- Handle insufficient funds scenarios
+- Retry failed transactions with proper limits
+
+Metadata Errors:
+- Validate metadata before minting
+- Handle IPFS/Arweave upload failures
+- Verify metadata accessibility
+
+## TESTING STRATEGY
+
+Unit Tests:
+- Mock RPC calls for consistent testing
+- Test transaction building separately from execution
+- Validate metadata schemas independently
+
+Integration Tests:
+- Use devnet for end-to-end testing
+- Test wallet connection flows
+- Verify complete minting workflows
+
+Performance Tests:
+- Measure transaction confirmation times
+- Test under network congestion
+- Validate fee estimation accuracy
+
+## DEPLOYMENT CONSIDERATIONS
+
+Environment Configuration:
+- Separate devnet/mainnet configurations
+- Use environment-specific RPC endpoints
+- Configure appropriate commitment levels
+
+Production Checklist:
+- Verify mainnet RPC reliability
+- Test with real wallet providers
+- Monitor transaction success rates
+- Implement comprehensive logging
+
+## VERBOSITY LEVELS
+
+V=0: Minimal viable minting function
+V=1: Basic minting with essential error handling
+V=2: Complete minting flow with user feedback
+V=3: Production-ready with comprehensive validation, retry logic, and monitoring 
