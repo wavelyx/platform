@@ -23,7 +23,7 @@ const pricingPlans = [
     price: "0",
     currency: "SOL",
     period: "forever",
-    description: "Perfect for testing and learning",
+    description: "Coming soon - Early access for Platform Pass holders",
     features: [
       "Create up to 3 tokens",
       "Basic token management",
@@ -31,27 +31,10 @@ const pricingPlans = [
       "Community support",
       "Basic analytics"
     ],
-    cta: "Start Free",
+    cta: "Coming Soon",
     variant: "outline" as const,
-    popular: false
-  },
-  {
-    name: "Creator",
-    price: "0.15",
-    currency: "SOL",
-    period: "per token",
-    description: "For serious token creators",
-    features: [
-      "Create unlimited tokens",
-      "Advanced token management",
-      "Priority processing",
-      "Custom metadata",
-      "Analytics dashboard",
-      "Email support"
-    ],
-    cta: "Start Creating",
-    variant: "default" as const,
-    popular: true
+    popular: false,
+    disabled: true
   },
   {
     name: "Platform Pass",
@@ -60,7 +43,11 @@ const pricingPlans = [
     period: "lifetime",
     description: "Ultimate access with exclusive NFT",
     features: [
-      "All Creator features",
+      "Create unlimited tokens",
+      "Advanced token management",
+      "Priority processing",
+      "Custom metadata",
+      "Analytics dashboard",
       "Exclusive NFT Pass",
       "Lowest fees forever (0.05 SOL/token)",
       "VIP support",
@@ -71,7 +58,7 @@ const pricingPlans = [
     ],
     cta: "Get NFT Pass",
     variant: "gradient" as const,
-    popular: false,
+    popular: true,
     nftPass: true
   }
 ]
@@ -112,7 +99,7 @@ export function PricingNFTSection() {
           </motion.div>
 
           {/* Pricing Cards */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-5xl mx-auto">
             {pricingPlans.map((plan, index) => (
               <motion.div
                 key={plan.name}
@@ -131,10 +118,12 @@ export function PricingNFTSection() {
                   </div>
                 )}
                 
-                <Card className={`relative h-full transition-all duration-500 hover:scale-[1.02] ${
-                  plan.popular 
-                    ? 'border-2 border-primary shadow-2xl shadow-primary/20' 
-                    : 'hover:shadow-xl'
+                <Card className={`relative h-full transition-all duration-500 ${
+                  plan.disabled 
+                    ? 'opacity-50 cursor-not-allowed' 
+                    : plan.popular 
+                      ? 'border-2 border-primary shadow-2xl shadow-primary/20 hover:scale-[1.02]' 
+                      : 'hover:shadow-xl hover:scale-[1.02]'
                 } ${plan.nftPass ? 'bg-gradient-to-br from-primary/5 via-background to-secondary/5 border-primary/30' : ''}`}>
                   
                   {plan.nftPass && (
@@ -165,32 +154,38 @@ export function PricingNFTSection() {
                     </div>
                   </CardHeader>
 
-                  <CardContent className="space-y-6">
-                    <ul className="space-y-3">
-                      {plan.features.map((feature, featureIndex) => (
-                        <li key={featureIndex} className="flex items-start">
-                          <Check className="w-5 h-5 text-green-500 mr-3 mt-0.5 flex-shrink-0" />
-                          <span className="text-sm text-muted-foreground">{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
+                  <CardContent className="flex flex-col h-full">
+                    <div className="flex-grow">
+                      <ul className="space-y-3">
+                        {plan.features.map((feature, featureIndex) => (
+                          <li key={featureIndex} className="flex items-start">
+                            <Check className="w-5 h-5 text-green-500 mr-3 mt-0.5 flex-shrink-0" />
+                            <span className="text-sm text-muted-foreground">{feature}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
 
-                    <Button
-                      variant={plan.variant}
-                      size="lg"
-                      className="w-full group font-semibold"
-                      onClick={() => {
-                        if (plan.nftPass) {
-                          setShowNFTMint(true)
-                        } else {
-                          window.open('https://app.wavelyz.io', '_blank')
-                        }
-                      }}
-                    >
-                      {plan.nftPass && <Sparkles className="w-5 h-5 mr-2 group-hover:rotate-12 transition-transform duration-300" />}
-                      {plan.cta}
-                      <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform duration-300" />
-                    </Button>
+                    <div className="mt-6">
+                      <Button
+                        variant={plan.variant}
+                        size="lg"
+                        className="w-full group font-semibold"
+                        disabled={plan.disabled}
+                        onClick={() => {
+                          if (plan.disabled) return
+                          if (plan.nftPass) {
+                            setShowNFTMint(true)
+                          } else {
+                            window.open('https://app.wavelyz.io', '_blank')
+                          }
+                        }}
+                      >
+                        {plan.nftPass && <Sparkles className="w-5 h-5 mr-2 group-hover:rotate-12 transition-transform duration-300" />}
+                        {plan.cta}
+                        {!plan.disabled && <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform duration-300" />}
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               </motion.div>

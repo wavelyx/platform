@@ -1,0 +1,7 @@
+/* global.css or your equivalent file */
+@import '@solana/wallet-adapter-react-ui/styles.css';
+
+.wallet-adapter-button-trigger {
+    background-color: #3E83FF !important;
+    border-radius: 99px !important;
+}

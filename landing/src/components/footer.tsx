@@ -36,9 +36,9 @@ export function Footer() {
       { name: "Status", href: "#status" },
     ],
     Legal: [
-      { name: "Privacy Policy", href: "#privacy" },
-      { name: "Terms of Service", href: "#terms" },
-      { name: "Cookie Policy", href: "#cookies" },
+      { name: "Privacy Policy", href: "/privacy" },
+      { name: "Terms of Service", href: "/terms" },
+      { name: "Cookie Policy", href: "/cookies" },
       { name: "GDPR", href: "#gdpr" },
     ],
   }
@@ -177,13 +177,13 @@ export function Footer() {
 
             {/* Additional Links */}
             <div className="flex items-center space-x-6 text-sm">
-              <a href="#privacy" className="text-muted-foreground hover:text-foreground transition-colors duration-300">
+              <a href="/privacy" className="text-muted-foreground hover:text-foreground transition-colors duration-300">
                 Privacy
               </a>
-              <a href="#terms" className="text-muted-foreground hover:text-foreground transition-colors duration-300">
+              <a href="/terms" className="text-muted-foreground hover:text-foreground transition-colors duration-300">
                 Terms
               </a>
-              <a href="#cookies" className="text-muted-foreground hover:text-foreground transition-colors duration-300">
+              <a href="/cookies" className="text-muted-foreground hover:text-foreground transition-colors duration-300">
                 Cookies
               </a>
             </div>

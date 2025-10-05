@@ -190,12 +190,12 @@ export function NFTPassSectionV2() {
   }, [publicKey, signTransaction, connection])
 
   const benefits = [
-    { icon: Zap, title: 'Priority Processing', desc: 'Faster transaction confirmation', color: 'text-yellow-500' },
-    { icon: Shield, title: 'Enhanced Security', desc: 'Advanced security features', color: 'text-blue-500' },
-    { icon: Star, title: 'Exclusive Features', desc: 'Early access to new features', color: 'text-purple-500' },
-    { icon: Gift, title: 'Special Rewards', desc: 'Exclusive airdrops and rewards', color: 'text-green-500' },
-    { icon: Settings, title: 'Advanced Tools', desc: 'Access to premium tools', color: 'text-orange-500' },
-    { icon: Crown, title: 'VIP Support', desc: 'Priority customer support', color: 'text-pink-500' }
+    { icon: Zap, title: 'Unlimited Token Creation', desc: 'Create unlimited tokens with advanced features', color: 'text-yellow-500' },
+    { icon: Shield, title: 'Priority Processing', desc: 'Faster transaction confirmation and processing', color: 'text-blue-500' },
+    { icon: Star, title: 'Advanced Token Management', desc: 'Burn, freeze, thaw, and manage token authorities', color: 'text-purple-500' },
+    { icon: Gift, title: 'Trading & Markets', desc: 'Create OpenBook markets and trading pairs', color: 'text-green-500' },
+    { icon: Settings, title: 'Distribution Tools', desc: 'Multisender and snapshot management tools', color: 'text-orange-500' },
+    { icon: Crown, title: 'VIP Support & Early Access', desc: 'Priority support and early feature access', color: 'text-pink-500' }
   ]
 
   return (
@@ -216,13 +216,13 @@ export function NFTPassSectionV2() {
                 Premium Access
               </Badge>
               <h1 className="text-4xl sm:text-5xl font-bold text-white mb-4">
-                wavelyz{' '}
+                Wavelyz{' '}
                 <span className="bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">
                   Platform Pass
                 </span>
               </h1>
               <p className="text-xl text-white/90 max-w-2xl mx-auto">
-                Unlock exclusive access to premium features, advanced tools, and priority support
+                Unlock the complete Wavelyz platform: unlimited tokens, advanced management, trading markets, and distribution tools
               </p>
             </div>
           </div>
@@ -263,7 +263,7 @@ export function NFTPassSectionV2() {
               {/* Price Card */}
               <Card className="bg-gradient-to-br from-yellow-400 to-orange-500 border-0 text-white">
                 <CardContent className="p-6 text-center">
-                  <div className="text-4xl font-bold mb-2">10 USDC</div>
+                  <div className="text-4xl font-bold mb-2">8 USDC</div>
                   <div className="text-lg opacity-90 mb-1">One-time payment</div>
                   <div className="text-sm opacity-80">Lifetime access to all premium features</div>
                 </CardContent>

@@ -22,7 +22,7 @@ const ENDPOINT = process.env.HELIUS_URL || 'https://mainnet.helius-rpc.com/?api-
 
 // NFT details
 const NFT_NAME = "wavelyz Platform Pass";
-const NFT_SYMBOL = "SOLXPASS";
+const NFT_SYMBOL = "wavely";
 
 // The amount to charge in USDC
 const PRICE_USDC = parseFloat(process.env.NEXT_PUBLIC_NFT_PRICE || "10");
