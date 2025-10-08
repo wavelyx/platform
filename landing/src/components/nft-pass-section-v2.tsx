@@ -263,9 +263,10 @@ export function NFTPassSectionV2() {
               {/* Price Card */}
               <Card className="bg-gradient-to-br from-yellow-400 to-orange-500 border-0 text-white">
                 <CardContent className="p-6 text-center">
-                  <div className="text-4xl font-bold mb-2">8 USDC</div>
+                  <div className="text-4xl font-bold mb-2">8 USDC + 0.016 SOL</div>
                   <div className="text-lg opacity-90 mb-1">One-time payment</div>
                   <div className="text-sm opacity-80">Lifetime access to all premium features</div>
+                  <div className="text-xs opacity-70 mt-2">SOL covers blockchain rent costs</div>
                 </CardContent>
               </Card>
             </div>

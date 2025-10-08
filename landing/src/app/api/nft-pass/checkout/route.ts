@@ -8,6 +8,7 @@ import {
   getAccount,
   TokenAccountNotFoundError
 } from '@solana/spl-token';
+import { SystemProgram } from '@solana/web3.js';
 import { keypairIdentity, Metaplex } from '@metaplex-foundation/js';
 import base58 from 'bs58';
 
@@ -25,7 +26,7 @@ const NFT_NAME = "wavelyz Platform Pass";
 const NFT_SYMBOL = "wavely";
 
 // The amount to charge in USDC
-const PRICE_USDC = parseFloat(process.env.NEXT_PUBLIC_NFT_PRICE || "10");
+const PRICE_USDC = parseFloat(process.env.NEXT_PUBLIC_NFT_PRICE || "8");
 
 type InputData = {
   account: string;
@@ -144,6 +145,24 @@ async function createNFTTransaction(account: PublicKey): Promise<PostResponse> {
     throw new Error(`Insufficient USDC balance. Required: ${PRICE_USDC} USDC, Available: ${Number(buyerTokenAccount.amount) / (10 ** decimals)} USDC`);
   }
 
+  // Define rent amount needed for NFT creation
+  const rentAmount = 0.016; // 0.016 SOL to cover rent costs (based on error: need 15115600 lamports = ~0.0151 SOL)
+  const rentLamports = Math.floor(rentAmount * 1e9);
+  
+  // Check if buyer has enough SOL for rent
+  const buyerBalance = await connection.getBalance(account);
+  
+  if (buyerBalance < rentLamports) {
+    console.error('Insufficient SOL balance for rent:', {
+      required: rentAmount,
+      available: buyerBalance / 1e9
+    });
+    throw new Error(`Insufficient SOL balance for rent. Required: ${rentAmount} SOL, Available: ${(buyerBalance / 1e9).toFixed(4)} SOL`);
+  }
+  
+  console.log('Buyer SOL balance:', buyerBalance / 1e9, 'SOL');
+  console.log('Rent required:', rentAmount, 'SOL');
+
   // Check if shop's USDC account exists
   let shopTokenAccount;
   try {
@@ -187,6 +206,17 @@ async function createNFTTransaction(account: PublicKey): Promise<PostResponse> {
   );
 
   transaction.add(usdcTransferInstruction);
+
+  // Add SOL transfer to cover rent costs for NFT creation
+  // The buyer pays SOL to cover the rent needed for NFT account creation
+  
+  const rentTransferInstruction = SystemProgram.transfer({
+    fromPubkey: account, // buyer pays the rent
+    toPubkey: shopKeypair.publicKey, // shop receives the SOL to pay for NFT creation
+    lamports: rentLamports,
+  });
+  
+  transaction.add(rentTransferInstruction);
   
   // Create NFT with minimal metadata to reduce size
   const transactionBuilder = await nfts.builders().create({
@@ -212,6 +242,7 @@ async function createNFTTransaction(account: PublicKey): Promise<PostResponse> {
   // They are required signers based on the instructions in the transaction
 
   // Set fee payer and blockhash for the transaction
+  // The buyer pays the transaction fees
   transaction.feePayer = account;
   transaction.recentBlockhash = latestBlockhash.blockhash;
   transaction.lastValidBlockHeight = latestBlockhash.lastValidBlockHeight;
@@ -263,6 +294,8 @@ async function createNFTTransaction(account: PublicKey): Promise<PostResponse> {
       instructionName = 'Create Associated Token Account';
     } else if (instruction.programId.toString() === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') {
       instructionName = 'USDC Transfer';
+    } else if (instruction.programId.toString() === '11111111111111111111111111111111') {
+      instructionName = 'SOL Transfer (Rent)';
     } else if (instruction.programId.toString() === 'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s') {
       instructionName = 'Metaplex NFT Creation';
     }
@@ -280,6 +313,17 @@ async function createNFTTransaction(account: PublicKey): Promise<PostResponse> {
       err: simulation.value.err,
       unitsConsumed: simulation.value.unitsConsumed,
     });
+    
+    // Log detailed error information
+    if (simulation.value.err) {
+      console.error('Simulation error details:', JSON.stringify(simulation.value.err, null, 2));
+      if (simulation.value.logs) {
+        console.error('Simulation logs:');
+        simulation.value.logs.forEach((log, index) => {
+          console.error(`  ${index + 1}: ${log}`);
+        });
+      }
+    }
   } catch (simError) {
     console.error('Error during simulation:', simError);
     // Continue anyway, simulation might fail due to missing signatures
@@ -300,7 +344,7 @@ async function createNFTTransaction(account: PublicKey): Promise<PostResponse> {
   console.log('Transaction is PRE-SIGNED by shop and mint - user needs to add their signature');
   console.log('Serialized transaction (first 100 chars):', `${base64.substring(0, 100)}...`);
 
-  const message = `Purchase your wavelyz Platform Pass for ${PRICE_USDC} USDC`;
+  const message = `Purchase your wavelyz Platform Pass for ${PRICE_USDC} USDC + ${rentAmount} SOL (rent)`;
 
   // Return the single transaction
   return {
