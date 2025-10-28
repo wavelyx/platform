@@ -28,8 +28,7 @@ import {
 
 // Types from the API
 type PostResponse = {
-  transaction1: string // USDC transfer + SOL rent
-  transaction2: string // NFT creation
+  transaction: string // Partially signed transaction (shop + mint signed, user needs to sign)
   message: string
 }
 
@@ -38,8 +37,7 @@ type PostError = {
 }
 
 type AddSignaturesResponse = {
-  fullySignedTransaction1: string
-  fullySignedTransaction2: string
+  fullySignedTransaction: string
   message: string
 }
 
@@ -51,9 +49,7 @@ export function NFTPassSectionV2() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
-  const [transactionHash1, setTransactionHash1] = useState<string | null>(null)
-  const [transactionHash2, setTransactionHash2] = useState<string | null>(null)
-  const [currentStep, setCurrentStep] = useState<'payment' | 'nft' | 'complete'>('payment')
+  const [transactionHash, setTransactionHash] = useState<string | null>(null)
 
   // Handler to clear error
   const handleClearError = () => setError(null)
@@ -66,24 +62,15 @@ export function NFTPassSectionV2() {
 
   // Memoized button text based on loading and success states
   const buttonText = useMemo(() => {
-    if (loading) {
-      if (currentStep === 'payment') return 'Processing Payment...'
-      if (currentStep === 'nft') return 'Creating NFT...'
-      return 'Processing...'
-    }
+    if (loading) return 'Processing Transaction...'
     if (success) return 'NFT Pass Minted!'
     return 'Mint NFT Pass'
-  }, [loading, success, currentStep])
+  }, [loading, success])
 
-  // Memoized transaction URLs
-  const transactionUrl1 = useMemo(() => 
-    transactionHash1 ? `https://solscan.io/tx/${transactionHash1}` : '',
-    [transactionHash1]
-  )
-  
-  const transactionUrl2 = useMemo(() => 
-    transactionHash2 ? `https://solscan.io/tx/${transactionHash2}` : '',
-    [transactionHash2]
+  // Memoized transaction URL
+  const transactionUrl = useMemo(() => 
+    transactionHash ? `https://solscan.io/tx/${transactionHash}` : '',
+    [transactionHash]
   )
 
   // Generate the Solana Pay QR code
@@ -113,11 +100,10 @@ export function NFTPassSectionV2() {
     setLoading(true)
     setError(null)
     setSuccess(false)
-    setCurrentStep('payment')
 
     try {
-      // Step 1: Fetch the two unsigned transactions from our checkout API
-      console.log('Step 1: Fetching unsigned transactions...')
+      // Step 1: Fetch the partially signed transaction from our checkout API
+      console.log('Step 1: Fetching partially signed transaction (shop + mint already signed)...')
       const response = await fetch('/api/nft-pass/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -134,28 +120,24 @@ export function NFTPassSectionV2() {
         return
       }
 
-      // Step 2: Deserialize both transactions
-      console.log('Step 2: Deserializing transactions...')
-      const transaction1 = Transaction.from(Buffer.from(responseBody.transaction1, 'base64'))
-      const transaction2 = Transaction.from(Buffer.from(responseBody.transaction2, 'base64'))
+      // Step 2: Deserialize the partially signed transaction
+      console.log('Step 2: Deserializing partially signed transaction...')
+      const partiallySignedTransaction = Transaction.from(Buffer.from(responseBody.transaction, 'base64'))
       
-      // Step 3: User wallet signs both transactions (Phantom requirement: user signs first)
-      console.log('Step 3: User wallet signing both transactions...')
-      const userSignedTransaction1 = await signTransaction(transaction1)
-      const userSignedTransaction2 = await signTransaction(transaction2)
+      // Step 3: User wallet signs the transaction (final signature)
+      console.log('Step 3: User wallet signing transaction (final signature)...')
+      const userSignedTransaction = await signTransaction(partiallySignedTransaction)
       
-      // Step 4: Send the user-signed transactions back for additional signatures
-      console.log('Step 4: Adding additional signatures...')
-      const userSignedBase64_1 = userSignedTransaction1.serialize().toString('base64')
-      const userSignedBase64_2 = userSignedTransaction2.serialize().toString('base64')
+      // Step 4: Send the fully signed transaction back for validation
+      console.log('Step 4: Validating fully signed transaction...')
+      const userSignedBase64 = userSignedTransaction.serialize().toString('base64')
       
       const signatureResponse = await fetch('/api/nft-pass/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           account: publicKey.toBase58(),
-          signedTransaction1: userSignedBase64_1,
-          signedTransaction2: userSignedBase64_2
+          signedTransaction: userSignedBase64
         })
       })
 
@@ -169,62 +151,36 @@ export function NFTPassSectionV2() {
         return
       }
 
-      // Step 5: Deserialize the fully signed transactions
-      console.log('Step 5: Deserializing fully signed transactions...')
-      const fullySignedTransaction1 = Transaction.from(Buffer.from(signatureBody.fullySignedTransaction1, 'base64'))
-      const fullySignedTransaction2 = Transaction.from(Buffer.from(signatureBody.fullySignedTransaction2, 'base64'))
+      // Step 5: Deserialize the fully signed transaction
+      console.log('Step 5: Deserializing fully signed transaction...')
+      const fullySignedTransaction = Transaction.from(Buffer.from(signatureBody.fullySignedTransaction, 'base64'))
       
-      // Step 6: Send the first transaction (USDC transfer)
-      console.log('Step 6: Sending transaction 1 (USDC transfer)...')
-      const signature1 = await connection.sendRawTransaction(fullySignedTransaction1.serialize(), {
+      // Step 6: Send the transaction (USDC transfer + NFT creation)
+      console.log('Step 6: Sending transaction (USDC transfer + NFT creation)...')
+      const signature = await connection.sendRawTransaction(fullySignedTransaction.serialize(), {
         skipPreflight: false,
         preflightCommitment: 'confirmed',
       })
       
-      // Step 7: Wait for first transaction confirmation
-      console.log('Step 7: Waiting for transaction 1 confirmation...')
-      const latestBlockhash1 = await connection.getLatestBlockhash()
-      const confirmation1 = await connection.confirmTransaction({
-        signature: signature1,
-        blockhash: latestBlockhash1.blockhash,
-        lastValidBlockHeight: latestBlockhash1.lastValidBlockHeight,
+      // Step 7: Wait for transaction confirmation
+      console.log('Step 7: Waiting for transaction confirmation...')
+      const latestBlockhash = await connection.getLatestBlockhash()
+      const confirmation = await connection.confirmTransaction({
+        signature: signature,
+        blockhash: latestBlockhash.blockhash,
+        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
       })
       
-      if (confirmation1.value.err) {
-        throw new Error('Transaction 1 (USDC payment) failed')
+      if (confirmation.value.err) {
+        throw new Error('Transaction failed')
       }
       
-      setTransactionHash1(signature1)
-      setCurrentStep('nft')
-      
-      // Step 8: Send the second transaction (NFT creation)
-      console.log('Step 8: Sending transaction 2 (NFT creation)...')
-      const signature2 = await connection.sendRawTransaction(fullySignedTransaction2.serialize(), {
-        skipPreflight: false,
-        preflightCommitment: 'confirmed',
-      })
-      
-      // Step 9: Wait for second transaction confirmation
-      console.log('Step 9: Waiting for transaction 2 confirmation...')
-      const latestBlockhash2 = await connection.getLatestBlockhash()
-      const confirmation2 = await connection.confirmTransaction({
-        signature: signature2,
-        blockhash: latestBlockhash2.blockhash,
-        lastValidBlockHeight: latestBlockhash2.lastValidBlockHeight,
-      })
-      
-      if (confirmation2.value.err) {
-        throw new Error('Transaction 2 (NFT creation) failed')
-      }
-      
-      setTransactionHash2(signature2)
+      setTransactionHash(signature)
       setSuccess(true)
-      setCurrentStep('complete')
       setLoading(false)
       
       console.log('NFT Pass minted successfully!')
-      console.log('Transaction 1 signature:', signature1)
-      console.log('Transaction 2 signature:', signature2)
+      console.log('Transaction signature:', signature)
       
     } catch (txError: any) {
       console.error(txError)
@@ -400,7 +356,7 @@ export function NFTPassSectionV2() {
                   </motion.div>
                 )}
 
-                {success && transactionHash1 && transactionHash2 && (
+                {success && transactionHash && (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -419,7 +375,7 @@ export function NFTPassSectionV2() {
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-green-600 dark:text-green-400 text-xs">
-                            Payment Transaction:
+                            Transaction:
                           </span>
                           <Button
                             variant="ghost"
@@ -427,24 +383,7 @@ export function NFTPassSectionV2() {
                             asChild
                             className="text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/30"
                           >
-                            <a href={transactionUrl1} target="_blank" rel="noopener noreferrer">
-                              <ExternalLink className="w-3 h-3 mr-1" />
-                              View
-                            </a>
-                          </Button>
-                        </div>
-                        
-                        <div className="flex items-center justify-between">
-                          <span className="text-green-600 dark:text-green-400 text-xs">
-                            NFT Creation Transaction:
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            asChild
-                            className="text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/30"
-                          >
-                            <a href={transactionUrl2} target="_blank" rel="noopener noreferrer">
+                            <a href={transactionUrl} target="_blank" rel="noopener noreferrer">
                               <ExternalLink className="w-3 h-3 mr-1" />
                               View
                             </a>

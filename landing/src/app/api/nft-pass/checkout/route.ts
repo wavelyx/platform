@@ -38,8 +38,7 @@ type GetResponse = {
 }
 
 export type PostResponse = {
-  transaction1: string; // USDC transfer + SOL rent
-  transaction2: string; // NFT creation
+  transaction: string; // Partially signed transaction (shop + mint signed, user needs to sign)
   message: string;
 }
 
@@ -49,13 +48,11 @@ export type PostError = {
 
 export type AddSignaturesRequest = {
   account: string;
-  signedTransaction1: string; // Base64 encoded transaction 1 signed by user
-  signedTransaction2: string; // Base64 encoded transaction 2 signed by user
+  signedTransaction: string; // Base64 encoded transaction signed by user (final signature)
 }
 
 export type AddSignaturesResponse = {
-  fullySignedTransaction1: string; // Base64 encoded transaction 1 with all signatures
-  fullySignedTransaction2: string; // Base64 encoded transaction 2 with all signatures
+  fullySignedTransaction: string; // Base64 encoded transaction with all signatures (ready to send)
   message: string;
 }
 
@@ -207,13 +204,11 @@ async function createNFTTransaction(account: PublicKey): Promise<PostResponse> {
     }
   }
 
-  // ===== TWO TRANSACTION STRATEGY =====
-  // Split into two transactions to avoid size limits and follow Phantom signing order
+  // ===== SINGLE TRANSACTION STRATEGY =====
+  // Combine USDC transfer and NFT creation into one transaction
   
   const latestBlockhash = await connection.getLatestBlockhash();
-  
-  // TRANSACTION 1: USDC Transfer Only (User signs first, then shop)
-  const transaction1 = new Transaction();
+  const transaction = new Transaction();
   
   // If shop's token account doesn't exist, add instruction to create it FIRST
   if (!shopTokenAccount) {
@@ -224,7 +219,7 @@ async function createNFTTransaction(account: PublicKey): Promise<PostResponse> {
       USDC_ADDRESS // mint
     );
     
-    transaction1.add(createShopTokenAccountInstruction);
+    transaction.add(createShopTokenAccountInstruction);
   }
 
   // Create USDC transfer instruction
@@ -237,25 +232,16 @@ async function createNFTTransaction(account: PublicKey): Promise<PostResponse> {
     decimals
   );
 
-  transaction1.add(usdcTransferInstruction);
+  transaction.add(usdcTransferInstruction);
   
-  // Set fee payer and blockhash for transaction 1
-  transaction1.feePayer = account;
-  transaction1.recentBlockhash = latestBlockhash.blockhash;
-  transaction1.lastValidBlockHeight = latestBlockhash.lastValidBlockHeight;
-
-  // TRANSACTION 2: NFT Creation (User signs first, then shop and mint)
-  const transaction2 = new Transaction();
-  
-  // First, transfer SOL from buyer to shop to cover NFT creation rent
-  // The shop needs SOL to pay for the NFT account creation
+  // Transfer SOL from buyer to shop to cover NFT creation rent
   const nftRentTransferInstruction = SystemProgram.transfer({
     fromPubkey: account, // buyer pays the rent
     toPubkey: shopKeypair.publicKey, // shop receives SOL to pay for NFT creation
     lamports: Math.floor(nftRentCost * 1e9), // transfer the exact amount needed for rent
   });
   
-  transaction2.add(nftRentTransferInstruction);
+  transaction.add(nftRentTransferInstruction);
   
   // Create NFT with minimal metadata to reduce size
   const transactionBuilder = await nfts.builders().create({
@@ -271,65 +257,50 @@ async function createNFTTransaction(account: PublicKey): Promise<PostResponse> {
   // Convert NFT builder to transaction
   const nftBuilderTransaction = await transactionBuilder.toTransaction(latestBlockhash);
   
-  // Add NFT instructions to transaction 2
+  // Add NFT instructions to main transaction
   nftBuilderTransaction.instructions.forEach(instruction => {
-    transaction2.add(instruction);
+    transaction.add(instruction);
   });
   
-  // Set fee payer and blockhash for transaction 2
-  transaction2.feePayer = account;
-  transaction2.recentBlockhash = latestBlockhash.blockhash;
-  transaction2.lastValidBlockHeight = latestBlockhash.lastValidBlockHeight;
+  // Set fee payer and blockhash for transaction
+  transaction.feePayer = account;
+  transaction.recentBlockhash = latestBlockhash.blockhash;
+  transaction.lastValidBlockHeight = latestBlockhash.lastValidBlockHeight;
 
-  console.log('\n=== Transaction Details (Two Transactions) ===');
-  console.log('Transaction 1 (USDC Transfer):');
-  console.log('- Instructions:', transaction1.instructions.length);
-  console.log('- Fee payer:', transaction1.feePayer?.toString());
-  console.log('- Recent blockhash:', transaction1.recentBlockhash);
-  console.log('- Last valid block height:', transaction1.lastValidBlockHeight);
+  // Sign with shop and mint first (partial signatures)
+  console.log('Adding shop signature to transaction...');
+  transaction.partialSign(shopKeypair);
   
-  console.log('Transaction 2 (NFT Creation - Buyer pays rent):');
-  console.log('- Instructions:', transaction2.instructions.length);
-  console.log('- Fee payer:', transaction2.feePayer?.toString());
-  console.log('- Recent blockhash:', transaction2.recentBlockhash);
-  console.log('- Last valid block height:', transaction2.lastValidBlockHeight);
+  console.log('Adding mint signature to transaction...');
+  transaction.partialSign(mintKeypair);
+
+  console.log('\n=== Transaction Details (Single Transaction) ===');
+  console.log('Transaction (USDC Transfer + NFT Creation):');
+  console.log('- Instructions:', transaction.instructions.length);
+  console.log('- Fee payer:', transaction.feePayer?.toString());
+  console.log('- Recent blockhash:', transaction.recentBlockhash);
+  console.log('- Last valid block height:', transaction.lastValidBlockHeight);
   
   // Log the transaction structure
   console.log('\n=== Transaction Structure ===');
-  console.log('Transaction 1 object keys:', Object.keys(transaction1));
-  console.log('Transaction 1 signatures array length:', transaction1.signatures?.length || 0);
-  console.log('Transaction 2 object keys:', Object.keys(transaction2));
-  console.log('Transaction 2 signatures array length:', transaction2.signatures?.length || 0);
+  console.log('Transaction object keys:', Object.keys(transaction));
+  console.log('Transaction signatures array length:', transaction.signatures?.length || 0);
   
-  console.log('- Signing order for both transactions:');
-  console.log('  1. User signs first (Phantom requirement)');
-  console.log('  2. Additional signers sign afterward');
-  console.log('  Transaction 1: User -> Shop (USDC transfer)');
-  console.log('  Transaction 2: User -> Shop + Mint (NFT creation)');
+  console.log('- Signing order:');
+  console.log('  1. Shop and Mint sign first (partial signatures)');
+  console.log('  2. User signs last (final signature)');
+  console.log('  Transaction: Shop + Mint -> User (USDC transfer + NFT creation)');
 
   // Log each instruction with descriptive names for debugging
-  console.log('\n=== Transaction 1 Instructions (Detailed) ===');
-  transaction1.instructions.forEach((instruction, index) => {
+  console.log('\n=== Transaction Instructions (Detailed) ===');
+  transaction.instructions.forEach((instruction, index) => {
     let instructionName = 'Unknown';
     
     if (instruction.programId.toString() === 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL') {
       instructionName = 'Create Associated Token Account';
     } else if (instruction.programId.toString() === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') {
       instructionName = 'USDC Transfer';
-    }
-    
-    console.log(`Instruction ${index + 1}: ${instructionName}`);
-    console.log('Program ID:', instruction.programId.toString());
-    console.log('Number of keys:', instruction.keys.length);
-    console.log('Keys:', instruction.keys.map((key, i) => `${i}: ${key.pubkey.toString()} (${key.isSigner ? 'signer' : 'not signer'}, ${key.isWritable ? 'writable' : 'read-only'})`));
-    console.log('Data length:', instruction.data.length, 'bytes');
-  });
-
-  console.log('\n=== Transaction 2 Instructions (Detailed) ===');
-  transaction2.instructions.forEach((instruction, index) => {
-    let instructionName = 'Unknown';
-    
-    if (instruction.programId.toString() === '11111111111111111111111111111111') {
+    } else if (instruction.programId.toString() === '11111111111111111111111111111111') {
       instructionName = 'SOL Transfer (NFT Rent)';
     } else if (instruction.programId.toString() === 'metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s') {
       instructionName = 'Metaplex NFT Creation';
@@ -342,73 +313,44 @@ async function createNFTTransaction(account: PublicKey): Promise<PostResponse> {
     console.log('Data length:', instruction.data.length, 'bytes');
   });
 
-  // Simulate both transactions to check for errors
-  console.log('\n=== Simulating Transaction 1 (USDC Transfer) ===');
+  // Simulate transaction to check for errors
+  console.log('\n=== Simulating Transaction (USDC Transfer + NFT Creation) ===');
   try {
-    const simulation1 = await connection.simulateTransaction(transaction1);
-    console.log('Transaction 1 Simulation result:', {
-      err: simulation1.value.err,
-      unitsConsumed: simulation1.value.unitsConsumed,
+    const simulation = await connection.simulateTransaction(transaction);
+    console.log('Transaction Simulation result:', {
+      err: simulation.value.err,
+      unitsConsumed: simulation.value.unitsConsumed,
     });
     
-    if (simulation1.value.err) {
-      console.error('Transaction 1 Simulation error details:', JSON.stringify(simulation1.value.err, null, 2));
-      if (simulation1.value.logs) {
-        console.error('Transaction 1 Simulation logs:');
-        simulation1.value.logs.forEach((log, index) => {
+    if (simulation.value.err) {
+      console.error('Transaction Simulation error details:', JSON.stringify(simulation.value.err, null, 2));
+      if (simulation.value.logs) {
+        console.error('Transaction Simulation logs:');
+        simulation.value.logs.forEach((log, index) => {
           console.error(`  ${index + 1}: ${log}`);
         });
       }
     } else {
-      console.log('✅ Transaction 1 simulation successful');
+      console.log('✅ Transaction simulation successful');
     }
-  } catch (simError1) {
-    console.error('Error during transaction 1 simulation:', simError1);
+  } catch (simError) {
+    console.error('Error during transaction simulation:', simError);
   }
 
-  console.log('\n=== Simulating Transaction 2 (NFT Creation) ===');
-  try {
-    const simulation2 = await connection.simulateTransaction(transaction2);
-    console.log('Transaction 2 Simulation result:', {
-      err: simulation2.value.err,
-      unitsConsumed: simulation2.value.unitsConsumed,
-    });
-    
-    if (simulation2.value.err) {
-      console.error('Transaction 2 Simulation error details:', JSON.stringify(simulation2.value.err, null, 2));
-      if (simulation2.value.logs) {
-        console.error('Transaction 2 Simulation logs:');
-        simulation2.value.logs.forEach((log, index) => {
-          console.error(`  ${index + 1}: ${log}`);
-        });
-      }
-    } else {
-      console.log('✅ Transaction 2 simulation successful');
-    }
-  } catch (simError2) {
-    console.error('Error during transaction 2 simulation:', simError2);
-  }
-
-  // Serialize both transactions
-  console.log('\n=== Serializing Transactions ===');
+  // Serialize transaction
+  console.log('\n=== Serializing Transaction ===');
   console.log('Serializing with requireAllSignatures: false');
   
-  const serialized1 = transaction1.serialize({
-    requireAllSignatures: false
-  });
-  const serialized2 = transaction2.serialize({
+  const serialized = transaction.serialize({
     requireAllSignatures: false
   });
 
-  const base64_1 = serialized1.toString('base64');
-  const base64_2 = serialized2.toString('base64');
+  const base64 = serialized.toString('base64');
 
-  console.log('\n=== Transactions Created Successfully ===');
-  console.log('Transaction 1 size:', serialized1.length, 'bytes');
-  console.log('Transaction 2 size:', serialized2.length, 'bytes');
-  console.log('Both transactions ready for user to sign first, then additional signers');
-  console.log('Transaction 1 (first 100 chars):', `${base64_1.substring(0, 100)}...`);
-  console.log('Transaction 2 (first 100 chars):', `${base64_2.substring(0, 100)}...`);
+  console.log('\n=== Transaction Created Successfully ===');
+  console.log('Transaction size:', serialized.length, 'bytes');
+  console.log('Transaction partially signed (shop + mint), ready for user signature');
+  console.log('Transaction (first 100 chars):', `${base64.substring(0, 100)}...`);
 
   // Summary for debugging
   console.log('\n=== DEBUGGING SUMMARY ===');
@@ -423,48 +365,32 @@ async function createNFTTransaction(account: PublicKey): Promise<PostResponse> {
   console.log('NFT Rent Cost:', nftRentCost, 'SOL');
   console.log('Transaction Fee Buffer:', transactionFeeBuffer, 'SOL');
   console.log('Total SOL Required:', totalRequiredSOL, 'SOL');
-  console.log('Transaction 1 Instructions:', transaction1.instructions.length);
-  console.log('Transaction 2 Instructions:', transaction2.instructions.length);
-  console.log('Transaction 1 Size:', serialized1.length, 'bytes');
-  console.log('Transaction 2 Size:', serialized2.length, 'bytes');
+  console.log('Transaction Instructions:', transaction.instructions.length);
+  console.log('Transaction Size:', serialized.length, 'bytes');
   console.log('=== END DEBUGGING SUMMARY ===');
 
-  const message = `Purchase your wavelyz Platform Pass for ${PRICE_USDC} USDC + ${totalRequiredSOL} SOL (NFT rent + fees) - Two transactions required`;
+  const message = `Purchase your wavelyz Platform Pass for ${PRICE_USDC} USDC + ${totalRequiredSOL} SOL (NFT rent + fees) - Partially signed, ready for your signature`;
 
-  // Return both transactions
+  // Return transaction
   return {
-    transaction1: base64_1,
-    transaction2: base64_2,
+    transaction: base64,
     message,
   };
 }
 
-async function addUserSignature(userSignedTransaction1Base64: string, userSignedTransaction2Base64: string): Promise<AddSignaturesResponse> {
-  console.log('=== Adding Additional Signatures to User-Signed Transactions ===');
+async function addUserSignature(userSignedTransactionBase64: string): Promise<AddSignaturesResponse> {
+  console.log('=== Adding Final User Signature to Partially Signed Transaction ===');
   
-  // Get the shop keypair from the environment variable
-  const shopPrivateKey = process.env.SHOP_PRIVATE_KEY;
-  if (!shopPrivateKey) {
-    throw new Error('SHOP_PRIVATE_KEY not found. Please check your .env.local file');
-  }
+  // Deserialize the user-signed transaction (already has shop + mint signatures)
+  const userSignedTransaction = Transaction.from(Buffer.from(userSignedTransactionBase64, 'base64'));
   
-  const shopKeypair = Keypair.fromSecretKey(base58.decode(shopPrivateKey));
+  console.log('User-signed transaction details:');
+  console.log('- Fee payer:', userSignedTransaction.feePayer?.toString());
+  console.log('- Instructions:', userSignedTransaction.instructions.length);
   
-  // Deserialize the user-signed transactions
-  const userSignedTransaction1 = Transaction.from(Buffer.from(userSignedTransaction1Base64, 'base64'));
-  const userSignedTransaction2 = Transaction.from(Buffer.from(userSignedTransaction2Base64, 'base64'));
-  
-  console.log('User-signed transaction 1 details:');
-  console.log('- Fee payer:', userSignedTransaction1.feePayer?.toString());
-  console.log('- Instructions:', userSignedTransaction1.instructions.length);
-  
-  console.log('User-signed transaction 2 details:');
-  console.log('- Fee payer:', userSignedTransaction2.feePayer?.toString());
-  console.log('- Instructions:', userSignedTransaction2.instructions.length);
-  
-  // Check which signatures are already present in transaction 1
-  console.log('Transaction 1 existing signatures:');
-  userSignedTransaction1.signatures.forEach((sig, index) => {
+  // Check which signatures are already present
+  console.log('Transaction existing signatures:');
+  userSignedTransaction.signatures.forEach((sig, index) => {
     if (sig.signature) {
       console.log(`- Signature ${index}: ${sig.publicKey.toString()} (present)`);
     } else {
@@ -472,49 +398,15 @@ async function addUserSignature(userSignedTransaction1Base64: string, userSigned
     }
   });
   
-  // Check which signatures are already present in transaction 2
-  console.log('Transaction 2 existing signatures:');
-  userSignedTransaction2.signatures.forEach((sig, index) => {
-    if (sig.signature) {
-      console.log(`- Signature ${index}: ${sig.publicKey.toString()} (present)`);
-    } else {
-      console.log(`- Signature ${index}: ${sig.publicKey.toString()} (missing)`);
-    }
-  });
+  console.log('✅ Transaction fully signed and ready to send');
   
-  // Add shop signature to transaction 1 (USDC + SOL transfer)
-  console.log('Adding shop signature to transaction 1...');
-  userSignedTransaction1.partialSign(shopKeypair);
-  
-  // For transaction 2, we need to add both shop and mint signatures
-  // First, we need to recreate the mint keypair (deterministic)
-  const userPublicKey = userSignedTransaction2.feePayer;
-  if (!userPublicKey) {
-    throw new Error('Transaction 2 fee payer not found');
-  }
-  
-  const mintSeed = userPublicKey.toBytes();
-  const mintKeypair = Keypair.fromSeed(mintSeed.slice(0, 32));
-  
-  console.log('Adding shop signature to transaction 2...');
-  userSignedTransaction2.partialSign(shopKeypair);
-  
-  console.log('Adding mint signature to transaction 2...');
-  userSignedTransaction2.partialSign(mintKeypair);
-  
-  console.log('✅ Both transactions fully signed and ready to send');
-  
-  // Serialize both fully signed transactions
-  const fullySignedTransaction1 = userSignedTransaction1.serialize();
-  const fullySignedTransaction2 = userSignedTransaction2.serialize();
-  
-  const base64_1 = fullySignedTransaction1.toString('base64');
-  const base64_2 = fullySignedTransaction2.toString('base64');
+  // Serialize fully signed transaction
+  const fullySignedTransaction = userSignedTransaction.serialize();
+  const base64 = fullySignedTransaction.toString('base64');
   
   return {
-    fullySignedTransaction1: base64_1,
-    fullySignedTransaction2: base64_2,
-    message: 'Both transactions fully signed and ready to send'
+    fullySignedTransaction: base64,
+    message: 'Transaction fully signed and ready to send'
   };
 }
 
@@ -526,21 +418,21 @@ export async function POST(request: NextRequest) {
     console.log('Request body:', body);
     
     // Check if this is a request to add signatures or create a new transaction
-    if (body.signedTransaction1 && body.signedTransaction2) {
-      // This is a request to add additional signatures to both transactions
-      console.log('Adding additional signatures to user-signed transactions');
-      const { signedTransaction1, signedTransaction2 } = body as AddSignaturesRequest;
+    if (body.signedTransaction) {
+      // This is a request to add additional signatures to the transaction
+      console.log('Adding additional signatures to user-signed transaction');
+      const { signedTransaction } = body as AddSignaturesRequest;
       
-      if (!signedTransaction1 || !signedTransaction2) {
+      if (!signedTransaction) {
         return NextResponse.json(
-          { error: "Both signed transactions must be provided" } as PostError, 
+          { error: "Signed transaction must be provided" } as PostError, 
           { status: 400 }
         );
       }
       
-      // Two transaction case
-      console.log('Processing two transaction case');
-      const signatureResult = await addUserSignature(signedTransaction1, signedTransaction2);
+      // Single transaction case
+      console.log('Processing single transaction case');
+      const signatureResult = await addUserSignature(signedTransaction);
       return NextResponse.json(signatureResult);
     }
     
