@@ -14,13 +14,13 @@ type Props = {
 export default function Layout({ children }: Props) {
   return (
     <SnackbarProvider>
-      <DashboardNFTGuard
+      {/* <DashboardNFTGuard
         redirectUrl="https://wavelyz.io/nft-pass"
         customMessage="Access to the wavelyz dashboard requires a Platform Pass NFT. This exclusive pass grants you access to premium token creation tools, advanced features, and priority support."
         allowBypass={process.env.NODE_ENV === 'development'}
-      >
+      > */}
         <DashboardLayout>{children}</DashboardLayout>
-      </DashboardNFTGuard>
+      {/* </DashboardNFTGuard> */}
     </SnackbarProvider>
   );
 }
